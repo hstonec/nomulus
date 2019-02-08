@@ -47,7 +47,7 @@ registry.testing.addToDocument = function(html) {
  */
 registry.testing.loadXml = function(xmlText) {
   var xml = goog.dom.xml.loadXml(xmlText);
-  goog.asserts.assert(xml != null);
+  expect(xml).not.toBeNull();
   if ('parsererror' in xml) {
     fail(xml['parsererror']['keyValue']);
   }
@@ -82,8 +82,7 @@ registry.testing.click = function(element) {
  * @param {!Element} element
  */
 registry.testing.assertVisible = function(element) {
-  assertTrue('Element should have CSS "shown" class',
-             goog.dom.classlist.contains(element, 'shown'));
+  expect(goog.dom.classlist.contains(element, 'shown')).toBe(true);
 };
 
 
@@ -92,8 +91,7 @@ registry.testing.assertVisible = function(element) {
  * @param {!Element} element
  */
 registry.testing.assertHidden = function(element) {
-  assertTrue('Element should have CSS "hidden" class',
-             goog.dom.classlist.contains(element, 'hidden'));
+  expect(goog.dom.classlist.contains(element, 'hidden')).toBe(true);
 };
 
 
@@ -104,7 +102,7 @@ registry.testing.assertHidden = function(element) {
  */
 registry.testing.assertObjectEqualsPretty = function(a, b) {
   try {
-    assertObjectEquals(a, b);
+    expect(a).toEqual(b);
   } catch (e) {
     e.message = e.message + '\n' +
         'expected: ' + registry.testing.pretty_.format(a) + '\n' +
@@ -125,8 +123,8 @@ registry.testing.assertObjectEqualsPretty = function(a, b) {
 registry.testing.assertReqMockRsp =
     function(xsrfToken, path, expectReqJson, mockRspJson) {
   var xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue('XHR is active.', xhr.isActive());
-  assertEquals(path, xhr.getLastUri());
+  expect(xhr.isActive()).toBe(true);
+  expect(path).toEqual(xhr.getLastUri());
   // XXX: XHR header checking should probably be added. Was inconsistent
   //      between admin and registrar consoles.
   registry.testing.assertObjectEqualsPretty(

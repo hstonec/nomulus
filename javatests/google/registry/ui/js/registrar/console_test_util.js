@@ -115,7 +115,7 @@ registry.registrar.ConsoleTestUtil.visit = function(
         .$does(function(args, cb) {
           // XXX: Args should be checked.
           const xml = goog.dom.xml.loadXml(opt_args.rspXml);
-          goog.asserts.assert(xml != null);
+          expect(xml).not.toBeNull();
           cb(registry.xml.convertToJson(xml));
         }).$anyTimes();
   }

@@ -19,397 +19,391 @@ goog.require('goog.dispose');
 goog.require('goog.dom');
 goog.require('goog.testing.MockControl');
 goog.require('goog.testing.PropertyReplacer');
-goog.require('goog.testing.asserts');
-goog.require('goog.testing.jsunit');
 goog.require('goog.testing.mockmatchers');
 goog.require('goog.testing.net.XhrIo');
 goog.require('registry.registrar.Console');
 goog.require('registry.registrar.ConsoleTestUtil');
 goog.require('registry.testing');
 
+describe("host tests", function() {
+  const $ = goog.dom.getRequiredElement;
+  const _ = goog.testing.mockmatchers.ignoreArgument;
+  const stubs = new goog.testing.PropertyReplacer();
+  const mocks = new goog.testing.MockControl();
 
-const $ = goog.dom.getRequiredElement;
-const _ = goog.testing.mockmatchers.ignoreArgument;
-const stubs = new goog.testing.PropertyReplacer();
-const mocks = new goog.testing.MockControl();
+  let historyMock;
+  let registrarConsole;
 
-let historyMock;
-let registrarConsole;
+  beforeEach(function() {
+    registry.testing.addToDocument('<div id="test"/>');
+    registry.testing.addToDocument('<div class="kd-butterbar"/>');
+    registry.registrar.ConsoleTestUtil.renderConsoleMain($('test'), {});
+    stubs.setPath('goog.net.XhrIo', goog.testing.net.XhrIo);
 
+    historyMock = mocks.createStrictMock(goog.History);
+    mocks.createConstructorMock(goog, 'History')().$returns(historyMock);
+    historyMock.addEventListener(_, _, _);
+    historyMock.setEnabled(true);
 
-function setUp() {
-  registry.testing.addToDocument('<div id="test"/>');
-  registry.testing.addToDocument('<div class="kd-butterbar"/>');
-  registry.registrar.ConsoleTestUtil.renderConsoleMain($('test'), {});
-  stubs.setPath('goog.net.XhrIo', goog.testing.net.XhrIo);
-
-  historyMock = mocks.createStrictMock(goog.History);
-  mocks.createConstructorMock(goog, 'History')().$returns(historyMock);
-  historyMock.addEventListener(_, _, _);
-  historyMock.setEnabled(true);
-
-  mocks.$replayAll();
-  registrarConsole = new registry.registrar.Console({
-    xsrfToken: '☢',
-    clientId: 'jartine'
+    mocks.$replayAll();
+    registrarConsole = new registry.registrar.Console({
+      xsrfToken: '☢',
+      clientId: 'jartine'
+    });
+    mocks.$verifyAll();
   });
-  mocks.$verifyAll();
-}
+
+  afterEach(function() {
+    goog.dispose(registrarConsole);
+    stubs.reset();
+    mocks.$tearDown();
+    goog.testing.net.XhrIo.cleanup();
+  });
+
+  /** Handles EPP login. */
+  function handleLogin() {
+    const request = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <command>' +
+        '    <login>' +
+        '      <clID>jartine</clID>' +
+        '      <pw>undefined</pw>' +
+        '      <options>' +
+        '        <version>1.0</version>' +
+        '        <lang>en</lang>' +
+        '      </options>' +
+        '      <svcs>' +
+        '        <objURI>urn:ietf:params:xml:ns:host-1.0</objURI>' +
+        '        <objURI>urn:ietf:params:xml:ns:domain-1.0</objURI>' +
+        '        <objURI>urn:ietf:params:xml:ns:contact-1.0</objURI>' +
+        '      </svcs>' +
+        '    </login>' +
+        '    <clTRID>asdf-1235</clTRID>' +
+        '  </command>' +
+        '</epp>');
+    const response = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <response>' +
+        '    <result code="2002">' +
+        '      <msg>Registrar is already logged in</msg>' +
+        '    </result>' +
+        '    <trID>' +
+        '      <clTRID>asdf-1235</clTRID>' +
+        '      <svTRID>ytk1RO+8SmaDQxrTIdulnw==-3</svTRID>' +
+        '    </trID>' +
+        '  </response>' +
+        '</epp>');
+    const xhr = goog.testing.net.XhrIo.getSendInstances().pop();
+    expect(xhr.isActive()).toBe(true);
+    expect('/registrar-xhr?clientId=jartine').toEqual(xhr.getLastUri());
+    expect('☢').toEqual(xhr.getLastRequestHeaders()['X-CSRF-Token']);
+    registry.testing.assertXmlEquals(request, xhr.getLastContent());
+    xhr.simulateResponse(200, response);
+  }
+
+  function testView() {
+    historyMock.$reset();
+    historyMock.getToken().$returns('host/ns1.justine.lol').$anyTimes();
+
+    mocks.$replayAll();
+
+    registrarConsole.handleHashChange();
+    handleLogin();
+
+    const request = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <command>' +
+        '    <info>' +
+        '      <host:info xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.justine.lol</host:name>' +
+        '      </host:info>' +
+        '    </info>' +
+        '    <clTRID>abc-1234</clTRID>' +
+        '  </command>' +
+        '</epp>');
+    const response = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"' +
+        '     xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '  <response>' +
+        '    <result code="1000">' +
+        '      <msg>Command completed successfully</msg>' +
+        '    </result>' +
+        '    <resData>' +
+        '      <host:infData>' +
+        '        <host:name>ns1.justine.lol</host:name>' +
+        '        <host:roid>8-roid</host:roid>' +
+        '        <host:status s="ok"/>' +
+        '        <host:addr ip="v4">8.8.8.8</host:addr>' +
+        '        <host:addr ip="v6">feed:a:bee::1</host:addr>' +
+        '        <host:clID>justine</host:clID>' +
+        '        <host:crID>justine</host:crID>' +
+        '        <host:crDate>2014-07-10T02:18:34Z</host:crDate>' +
+        '      </host:infData>' +
+        '    </resData>' +
+        '    <trID>' +
+        '      <clTRID>abc-1234</clTRID>' +
+        '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
+        '    </trID>' +
+        '  </response>' +
+        '</epp>');
+    const xhr = goog.testing.net.XhrIo.getSendInstances().pop();
+    expect(xhr.isActive()).toBe(true);
+    expect('/registrar-xhr?clientId=jartine').toEqual(xhr.getLastUri());
+    expect('application/epp+xml').toEqual(xhr.getLastRequestHeaders()['Content-Type']);
+    expect('☢').toEqual(xhr.getLastRequestHeaders()['X-CSRF-Token']);
+    registry.testing.assertXmlEquals(request, xhr.getLastContent());
+    xhr.simulateResponse(200, response);
+    expect(0).toEqual(goog.testing.net.XhrIo.getSendInstances().length);
+
+    mocks.$verifyAll();
+
+    expect($('host:chgName').readOnly).toBe(true);
+    expect($('reg-content').innerHTML).toContain('ns1.justine.lol');
+    expect('ns1.justine.lol').toEqual($('host:chgName').value);
+    expect('8.8.8.8').toEqual($('host:addr[0].value').value);
+    expect('feed:a:bee::1').toEqual($('host:addr[1].value').value);
+  }
+
+  it("testView", function() {
+    testView();
+  });
+
+  function testHost_testEditFirstAddr_ignoreSecond_addThird() {
+    testView();
+
+    historyMock.$reset();
+
+    mocks.$replayAll();
+
+    registry.testing.click($('reg-app-btn-edit'));
+
+    expect($('host:addr[0].value').readOnly).toBe(false);
+    $('host:addr[0].value').value = '1.2.3.4';
+    registry.testing.click($('domain-host-addr-add-button'));
+    $('host:addr[2].value').value = 'feed:a:fed::1';
+
+    registry.testing.click($('reg-app-btn-save'));
+
+    let request = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <command>' +
+        '    <update>' +
+        '      <host:update xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.justine.lol</host:name>' +
+        '        <host:add>' +
+        '          <host:addr ip="v4">1.2.3.4</host:addr>' +
+        '          <host:addr ip="v6">feed:a:fed::1</host:addr>' +
+        '        </host:add>' +
+        '        <host:rem>' +
+        '          <host:addr ip="v4">8.8.8.8</host:addr>' +
+        '        </host:rem>' +
+        '      </host:update>' +
+        '    </update>' +
+        '    <clTRID>abc-1234</clTRID>' +
+        '  </command>' +
+        '</epp>');
+    let response = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <response>' +
+        '    <result code="1000">' +
+        '      <msg>This world is built from a million lies.</msg>' +
+        '    </result>' +
+        '    <trID>' +
+        '      <clTRID>abc-1234</clTRID>' +
+        '      <svTRID>214CjbYuTsijoP8sgyFUNg==-e</svTRID>' +
+        '    </trID>' +
+        '  </response>' +
+        '</epp>');
+    let xhr = goog.testing.net.XhrIo.getSendInstances().pop();
+    expect(xhr.isActive()).toBe(true);
+    expect('/registrar-xhr?clientId=jartine').toEqual(xhr.getLastUri());
+    expect('☢').toEqual(xhr.getLastRequestHeaders()['X-CSRF-Token']);
+    registry.testing.assertXmlEquals(request, xhr.getLastContent());
+    xhr.simulateResponse(200, response);
+
+    request = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <command>' +
+        '    <info>' +
+        '      <host:info xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.justine.lol</host:name>' +
+        '      </host:info>' +
+        '    </info>' +
+        '    <clTRID>abc-1234</clTRID>' +
+        '  </command>' +
+        '</epp>');
+    response = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"' +
+        '     xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '  <response>' +
+        '    <result code="1000">' +
+        '      <msg>Command completed successfully</msg>' +
+        '    </result>' +
+        '    <resData>' +
+        '      <host:infData>' +
+        '        <host:name>ns1.justine.lol</host:name>' +
+        '        <host:roid>8-roid</host:roid>' +
+        '        <host:status s="ok"/>' +
+        '        <host:addr ip="v6">feed:a:bee::1</host:addr>' +
+        '        <host:addr ip="v4">1.2.3.4</host:addr>' +
+        '        <host:addr ip="v6">feed:a:fed::1</host:addr>' +
+        '        <host:clID>justine</host:clID>' +
+        '        <host:crID>justine</host:crID>' +
+        '        <host:crDate>2014-07-10T02:18:34Z</host:crDate>' +
+        '      </host:infData>' +
+        '    </resData>' +
+        '    <trID>' +
+        '      <clTRID>abc-1234</clTRID>' +
+        '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
+        '    </trID>' +
+        '  </response>' +
+        '</epp>');
+    xhr = goog.testing.net.XhrIo.getSendInstances().pop();
+    expect(xhr.isActive()).toBe(true);
+    expect('/registrar-xhr?clientId=jartine').toEqual(xhr.getLastUri());
+    expect('☢').toEqual(xhr.getLastRequestHeaders()['X-CSRF-Token']);
+    registry.testing.assertXmlEquals(request, xhr.getLastContent());
+    xhr.simulateResponse(200, response);
+    expect(0).toEqual(goog.testing.net.XhrIo.getSendInstances().length);
+
+    mocks.$verifyAll();
+
+    expect($('host:chgName').readOnly).toBe(true);
+    expect($('reg-content').innerHTML).toContain('ns1.justine.lol');
+    expect('ns1.justine.lol').toEqual($('host:chgName').value);
+    expect('feed:a:bee::1').toEqual($('host:addr[0].value').value);
+    expect('1.2.3.4').toEqual($('host:addr[1].value').value);
+    expect('feed:a:fed::1').toEqual($('host:addr[2].value').value);
+  }
 
 
-function tearDown() {
-  goog.dispose(registrarConsole);
-  stubs.reset();
-  mocks.$tearDown();
-  goog.testing.net.XhrIo.cleanup();
-}
+  function testHost_testCreate() {
+    historyMock.$reset();
+    historyMock.getToken().$returns('host').$anyTimes();
+    mocks.$replayAll();
+    registrarConsole.handleHashChange();
+    handleLogin();
+    mocks.$verifyAll();
 
+    expect($('host:name').readOnly).toBe(false);
+    $('host:name').value = 'ns1.example.tld';
+    registry.testing.click($('domain-host-addr-add-button'));
+    $('host:addr[0].value').value = '192.0.2.2';
+    registry.testing.click($('domain-host-addr-add-button'));
+    $('host:addr[1].value').value = '192.0.2.29';
+    registry.testing.click($('domain-host-addr-add-button'));
+    $('host:addr[2].value').value = '1080:0:0:0:8:800:200C:417A';
 
-/** Handles EPP login. */
-function handleLogin() {
-  const request = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <command>' +
-      '    <login>' +
-      '      <clID>jartine</clID>' +
-      '      <pw>undefined</pw>' +
-      '      <options>' +
-      '        <version>1.0</version>' +
-      '        <lang>en</lang>' +
-      '      </options>' +
-      '      <svcs>' +
-      '        <objURI>urn:ietf:params:xml:ns:host-1.0</objURI>' +
-      '        <objURI>urn:ietf:params:xml:ns:domain-1.0</objURI>' +
-      '        <objURI>urn:ietf:params:xml:ns:contact-1.0</objURI>' +
-      '      </svcs>' +
-      '    </login>' +
-      '    <clTRID>asdf-1235</clTRID>' +
-      '  </command>' +
-      '</epp>');
-  const response = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <response>' +
-      '    <result code="2002">' +
-      '      <msg>Registrar is already logged in</msg>' +
-      '    </result>' +
-      '    <trID>' +
-      '      <clTRID>asdf-1235</clTRID>' +
-      '      <svTRID>ytk1RO+8SmaDQxrTIdulnw==-3</svTRID>' +
-      '    </trID>' +
-      '  </response>' +
-      '</epp>');
-  const xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue(xhr.isActive());
-  assertEquals('/registrar-xhr?clientId=jartine', xhr.getLastUri());
-  assertEquals('☢', xhr.getLastRequestHeaders()['X-CSRF-Token']);
-  registry.testing.assertXmlEquals(request, xhr.getLastContent());
-  xhr.simulateResponse(200, response);
-}
+    historyMock.$reset();
+    mocks.$replayAll();
 
+    registry.testing.click($('reg-app-btn-save'));
 
-function testView() {
-  historyMock.$reset();
-  historyMock.getToken().$returns('host/ns1.justine.lol').$anyTimes();
+    let request = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <command>' +
+        '    <create>' +
+        '      <host:create xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.example.tld</host:name>' +
+        '        <host:addr ip="v4">192.0.2.2</host:addr>' +
+        '        <host:addr ip="v4">192.0.2.29</host:addr>' +
+        '        <host:addr ip="v6">1080:0:0:0:8:800:200C:417A</host:addr>' +
+        '      </host:create>' +
+        '    </create>' +
+        '    <clTRID>abc-1234</clTRID>' +
+        '  </command>' +
+        '</epp>');
+    let response = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <response>' +
+        '    <result code="1000">' +
+        '      <msg>Command completed successfully</msg>' +
+        '    </result>' +
+        '    <resData>' +
+        '      <host:creData xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.example.tld</host:name>' +
+        '        <host:crDate>1999-04-03T22:00:00.0Z</host:crDate>' +
+        '      </host:creData>' +
+        '    </resData>' +
+        '    <trID>' +
+        '      <clTRID>abc-1234</clTRID>' +
+        '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
+        '    </trID>' +
+        '  </response>' +
+        '</epp>');
+    let xhr = goog.testing.net.XhrIo.getSendInstances().pop();
+    expect(xhr.isActive()).toBe(true);
+    expect('/registrar-xhr?clientId=jartine').toEqual(xhr.getLastUri());
+    expect('☢').toEqual(xhr.getLastRequestHeaders()['X-CSRF-Token']);
+    registry.testing.assertXmlEquals(request, xhr.getLastContent());
+    xhr.simulateResponse(200, response);
 
-  mocks.$replayAll();
+    request = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <command>' +
+        '    <info>' +
+        '      <host:info xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.example.tld</host:name>' +
+        '      </host:info>' +
+        '    </info>' +
+        '    <clTRID>abc-1234</clTRID>' +
+        '  </command>' +
+        '</epp>');
+    response = registry.testing.loadXml(
+        '<?xml version="1.0"?>' +
+        '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
+        '  <response>' +
+        '    <result code="1000">' +
+        '      <msg>Command completed successfully</msg>' +
+        '    </result>' +
+        '    <resData>' +
+        '      <host:infData xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
+        '        <host:name>ns1.example.tld</host:name>' +
+        '        <host:roid>NS1_EXAMPLE1-REP</host:roid>' +
+        '        <host:status s="linked"/>' +
+        '        <host:status s="clientUpdateProhibited"/>' +
+        '        <host:addr ip="v4">192.0.2.2</host:addr>' +
+        '        <host:addr ip="v4">192.0.2.29</host:addr>' +
+        '        <host:addr ip="v6">1080:0:0:0:8:800:200C:417A</host:addr>' +
+        '        <host:clID>TheRegistrar</host:clID>' +
+        '        <host:crID>NewRegistrar</host:crID>' +
+        '        <host:crDate>1999-04-03T22:00:00.0Z</host:crDate>' +
+        '        <host:upID>NewRegistrar</host:upID>' +
+        '        <host:upDate>1999-12-03T09:00:00.0Z</host:upDate>' +
+        '        <host:trDate>2000-04-08T09:00:00.0Z</host:trDate>' +
+        '      </host:infData>' +
+        '    </resData>' +
+        '    <trID>' +
+        '      <clTRID>abc-1234</clTRID>' +
+        '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
+        '    </trID>' +
+        '  </response>' +
+        '</epp>');
+    xhr = goog.testing.net.XhrIo.getSendInstances().pop();
+    expect(xhr.isActive()).toBe(true);
+    expect('/registrar-xhr?clientId=jartine').toEqual(xhr.getLastUri());
+    expect('☢').toEqual(xhr.getLastRequestHeaders()['X-CSRF-Token']);
+    registry.testing.assertXmlEquals(request, xhr.getLastContent());
+    xhr.simulateResponse(200, response);
+    expect(0).toEqual(goog.testing.net.XhrIo.getSendInstances().length);
 
-  registrarConsole.handleHashChange();
-  handleLogin();
+    mocks.$verifyAll();
 
-  const request = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <command>' +
-      '    <info>' +
-      '      <host:info xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.justine.lol</host:name>' +
-      '      </host:info>' +
-      '    </info>' +
-      '    <clTRID>abc-1234</clTRID>' +
-      '  </command>' +
-      '</epp>');
-  const response = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"' +
-      '     xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '  <response>' +
-      '    <result code="1000">' +
-      '      <msg>Command completed successfully</msg>' +
-      '    </result>' +
-      '    <resData>' +
-      '      <host:infData>' +
-      '        <host:name>ns1.justine.lol</host:name>' +
-      '        <host:roid>8-roid</host:roid>' +
-      '        <host:status s="ok"/>' +
-      '        <host:addr ip="v4">8.8.8.8</host:addr>' +
-      '        <host:addr ip="v6">feed:a:bee::1</host:addr>' +
-      '        <host:clID>justine</host:clID>' +
-      '        <host:crID>justine</host:crID>' +
-      '        <host:crDate>2014-07-10T02:18:34Z</host:crDate>' +
-      '      </host:infData>' +
-      '    </resData>' +
-      '    <trID>' +
-      '      <clTRID>abc-1234</clTRID>' +
-      '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
-      '    </trID>' +
-      '  </response>' +
-      '</epp>');
-  const xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue('XHR is inactive.', xhr.isActive());
-  assertEquals('/registrar-xhr?clientId=jartine', xhr.getLastUri());
-  assertEquals('application/epp+xml',
-               xhr.getLastRequestHeaders()['Content-Type']);
-  assertEquals('☢', xhr.getLastRequestHeaders()['X-CSRF-Token']);
-  registry.testing.assertXmlEquals(request, xhr.getLastContent());
-  xhr.simulateResponse(200, response);
-  assertEquals('We require more vespene gas.',
-               0, goog.testing.net.XhrIo.getSendInstances().length);
-
-  mocks.$verifyAll();
-
-  assertTrue('Form should be read-only.', $('host:chgName').readOnly);
-  assertContains('ns1.justine.lol', $('reg-content').innerHTML);
-  assertEquals('ns1.justine.lol', $('host:chgName').value);
-  assertEquals('8.8.8.8', $('host:addr[0].value').value);
-  assertEquals('feed:a:bee::1', $('host:addr[1].value').value);
-}
-
-
-function testEditFirstAddr_ignoreSecond_addThird() {
-  testView();
-
-  historyMock.$reset();
-
-  mocks.$replayAll();
-
-  registry.testing.click($('reg-app-btn-edit'));
-
-  assertFalse('Form should be edible.', $('host:addr[0].value').readOnly);
-  $('host:addr[0].value').value = '1.2.3.4';
-  registry.testing.click($('domain-host-addr-add-button'));
-  $('host:addr[2].value').value = 'feed:a:fed::1';
-
-  registry.testing.click($('reg-app-btn-save'));
-
-  let request = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <command>' +
-      '    <update>' +
-      '      <host:update xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.justine.lol</host:name>' +
-      '        <host:add>' +
-      '          <host:addr ip="v4">1.2.3.4</host:addr>' +
-      '          <host:addr ip="v6">feed:a:fed::1</host:addr>' +
-      '        </host:add>' +
-      '        <host:rem>' +
-      '          <host:addr ip="v4">8.8.8.8</host:addr>' +
-      '        </host:rem>' +
-      '      </host:update>' +
-      '    </update>' +
-      '    <clTRID>abc-1234</clTRID>' +
-      '  </command>' +
-      '</epp>');
-  let response = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <response>' +
-      '    <result code="1000">' +
-      '      <msg>This world is built from a million lies.</msg>' +
-      '    </result>' +
-      '    <trID>' +
-      '      <clTRID>abc-1234</clTRID>' +
-      '      <svTRID>214CjbYuTsijoP8sgyFUNg==-e</svTRID>' +
-      '    </trID>' +
-      '  </response>' +
-      '</epp>');
-  let xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue('XHR is inactive.', xhr.isActive());
-  assertEquals('/registrar-xhr?clientId=jartine', xhr.getLastUri());
-  assertEquals('☢', xhr.getLastRequestHeaders()['X-CSRF-Token']);
-  registry.testing.assertXmlEquals(request, xhr.getLastContent());
-  xhr.simulateResponse(200, response);
-
-  request = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <command>' +
-      '    <info>' +
-      '      <host:info xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.justine.lol</host:name>' +
-      '      </host:info>' +
-      '    </info>' +
-      '    <clTRID>abc-1234</clTRID>' +
-      '  </command>' +
-      '</epp>');
-  response = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"' +
-      '     xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '  <response>' +
-      '    <result code="1000">' +
-      '      <msg>Command completed successfully</msg>' +
-      '    </result>' +
-      '    <resData>' +
-      '      <host:infData>' +
-      '        <host:name>ns1.justine.lol</host:name>' +
-      '        <host:roid>8-roid</host:roid>' +
-      '        <host:status s="ok"/>' +
-      '        <host:addr ip="v6">feed:a:bee::1</host:addr>' +
-      '        <host:addr ip="v4">1.2.3.4</host:addr>' +
-      '        <host:addr ip="v6">feed:a:fed::1</host:addr>' +
-      '        <host:clID>justine</host:clID>' +
-      '        <host:crID>justine</host:crID>' +
-      '        <host:crDate>2014-07-10T02:18:34Z</host:crDate>' +
-      '      </host:infData>' +
-      '    </resData>' +
-      '    <trID>' +
-      '      <clTRID>abc-1234</clTRID>' +
-      '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
-      '    </trID>' +
-      '  </response>' +
-      '</epp>');
-  xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue('XHR is inactive.', xhr.isActive());
-  assertEquals('/registrar-xhr?clientId=jartine', xhr.getLastUri());
-  assertEquals('☢', xhr.getLastRequestHeaders()['X-CSRF-Token']);
-  registry.testing.assertXmlEquals(request, xhr.getLastContent());
-  xhr.simulateResponse(200, response);
-  assertEquals('We require more vespene gas.',
-               0, goog.testing.net.XhrIo.getSendInstances().length);
-
-  mocks.$verifyAll();
-
-  assertTrue('Form should be read-only.', $('host:chgName').readOnly);
-  assertContains('ns1.justine.lol', $('reg-content').innerHTML);
-  assertEquals('ns1.justine.lol', $('host:chgName').value);
-  assertEquals('feed:a:bee::1', $('host:addr[0].value').value);
-  assertEquals('1.2.3.4', $('host:addr[1].value').value);
-  assertEquals('feed:a:fed::1', $('host:addr[2].value').value);
-}
-
-
-function testCreate() {
-  historyMock.$reset();
-  historyMock.getToken().$returns('host').$anyTimes();
-  mocks.$replayAll();
-  registrarConsole.handleHashChange();
-  handleLogin();
-  mocks.$verifyAll();
-
-  assertFalse('Form should be edible.', $('host:name').readOnly);
-  $('host:name').value = 'ns1.example.tld';
-  registry.testing.click($('domain-host-addr-add-button'));
-  $('host:addr[0].value').value = '192.0.2.2';
-  registry.testing.click($('domain-host-addr-add-button'));
-  $('host:addr[1].value').value = '192.0.2.29';
-  registry.testing.click($('domain-host-addr-add-button'));
-  $('host:addr[2].value').value = '1080:0:0:0:8:800:200C:417A';
-
-  historyMock.$reset();
-  mocks.$replayAll();
-
-  registry.testing.click($('reg-app-btn-save'));
-
-  let request = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <command>' +
-      '    <create>' +
-      '      <host:create xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.example.tld</host:name>' +
-      '        <host:addr ip="v4">192.0.2.2</host:addr>' +
-      '        <host:addr ip="v4">192.0.2.29</host:addr>' +
-      '        <host:addr ip="v6">1080:0:0:0:8:800:200C:417A</host:addr>' +
-      '      </host:create>' +
-      '    </create>' +
-      '    <clTRID>abc-1234</clTRID>' +
-      '  </command>' +
-      '</epp>');
-  let response = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <response>' +
-      '    <result code="1000">' +
-      '      <msg>Command completed successfully</msg>' +
-      '    </result>' +
-      '    <resData>' +
-      '      <host:creData xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.example.tld</host:name>' +
-      '        <host:crDate>1999-04-03T22:00:00.0Z</host:crDate>' +
-      '      </host:creData>' +
-      '    </resData>' +
-      '    <trID>' +
-      '      <clTRID>abc-1234</clTRID>' +
-      '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
-      '    </trID>' +
-      '  </response>' +
-      '</epp>');
-  let xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue('XHR is inactive.', xhr.isActive());
-  assertEquals('/registrar-xhr?clientId=jartine', xhr.getLastUri());
-  assertEquals('☢', xhr.getLastRequestHeaders()['X-CSRF-Token']);
-  registry.testing.assertXmlEquals(request, xhr.getLastContent());
-  xhr.simulateResponse(200, response);
-
-  request = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <command>' +
-      '    <info>' +
-      '      <host:info xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.example.tld</host:name>' +
-      '      </host:info>' +
-      '    </info>' +
-      '    <clTRID>abc-1234</clTRID>' +
-      '  </command>' +
-      '</epp>');
-  response = registry.testing.loadXml(
-      '<?xml version="1.0"?>' +
-      '<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">' +
-      '  <response>' +
-      '    <result code="1000">' +
-      '      <msg>Command completed successfully</msg>' +
-      '    </result>' +
-      '    <resData>' +
-      '      <host:infData xmlns:host="urn:ietf:params:xml:ns:host-1.0">' +
-      '        <host:name>ns1.example.tld</host:name>' +
-      '        <host:roid>NS1_EXAMPLE1-REP</host:roid>' +
-      '        <host:status s="linked"/>' +
-      '        <host:status s="clientUpdateProhibited"/>' +
-      '        <host:addr ip="v4">192.0.2.2</host:addr>' +
-      '        <host:addr ip="v4">192.0.2.29</host:addr>' +
-      '        <host:addr ip="v6">1080:0:0:0:8:800:200C:417A</host:addr>' +
-      '        <host:clID>TheRegistrar</host:clID>' +
-      '        <host:crID>NewRegistrar</host:crID>' +
-      '        <host:crDate>1999-04-03T22:00:00.0Z</host:crDate>' +
-      '        <host:upID>NewRegistrar</host:upID>' +
-      '        <host:upDate>1999-12-03T09:00:00.0Z</host:upDate>' +
-      '        <host:trDate>2000-04-08T09:00:00.0Z</host:trDate>' +
-      '      </host:infData>' +
-      '    </resData>' +
-      '    <trID>' +
-      '      <clTRID>abc-1234</clTRID>' +
-      '      <svTRID>EweBEzCZTJirOqRmrtYrAA==-b</svTRID>' +
-      '    </trID>' +
-      '  </response>' +
-      '</epp>');
-  xhr = goog.testing.net.XhrIo.getSendInstances().pop();
-  assertTrue('XHR is inactive.', xhr.isActive());
-  assertEquals('/registrar-xhr?clientId=jartine', xhr.getLastUri());
-  assertEquals('☢', xhr.getLastRequestHeaders()['X-CSRF-Token']);
-  registry.testing.assertXmlEquals(request, xhr.getLastContent());
-  xhr.simulateResponse(200, response);
-  assertEquals('We require more vespene gas.',
-               0, goog.testing.net.XhrIo.getSendInstances().length);
-
-  mocks.$verifyAll();
-
-  assertTrue('Form should be read-only.', $('host:chgName').readOnly);
-  assertEquals('ns1.example.tld', $('host:chgName').value);
-  assertEquals('192.0.2.2', $('host:addr[0].value').value);
-  assertEquals('192.0.2.29', $('host:addr[1].value').value);
-  assertEquals('1080:0:0:0:8:800:200C:417A', $('host:addr[2].value').value);
-}
+    expect($('host:chgName').readOnly).toBe(true);
+    expect('ns1.example.tld').toEqual($('host:chgName').value);
+    expect('192.0.2.2').toEqual($('host:addr[0].value').value);
+    expect('192.0.2.29').toEqual($('host:addr[1].value').value);
+    expect('1080:0:0:0:8:800:200C:417A').toEqual($('host:addr[2].value').value);
+  }
+});
