@@ -38,6 +38,7 @@ import google.registry.config.CredentialModule.DefaultCredential;
 import google.registry.config.CredentialModule.LocalCredential;
 import google.registry.config.CredentialModule.LocalCredentialJson;
 import google.registry.config.RegistryConfig.Config;
+import google.registry.util.GoogleCredentialsBundle;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -76,7 +77,7 @@ public class AuthModule {
 
   @Provides
   @LocalCredential
-  public static GoogleCredentials provideLocalCredential(
+  public static GoogleCredentialsBundle provideLocalCredential(
       @LocalCredentialJson String credentialJson,
       @Config("localCredentialOauthScopes") ImmutableList<String> scopes) {
     try {
@@ -85,7 +86,7 @@ public class AuthModule {
       if (credential.createScopedRequired()) {
         credential = credential.createScoped(scopes);
       }
-      return credential;
+      return GoogleCredentialsBundle.create(credential);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -199,8 +200,8 @@ public class AuthModule {
   abstract static class LocalCredentialModule {
     @Binds
     @DefaultCredential
-    abstract GoogleCredentials provideLocalCredentialAsDefaultCredential(
-        @LocalCredential GoogleCredentials credential);
+    abstract GoogleCredentialsBundle provideLocalCredentialAsDefaultCredential(
+        @LocalCredential GoogleCredentialsBundle credential);
   }
 
   /** Raised when we need a user login. */

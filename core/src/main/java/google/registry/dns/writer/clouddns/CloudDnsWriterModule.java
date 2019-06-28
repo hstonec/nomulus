@@ -14,10 +14,7 @@
 
 package google.registry.dns.writer.clouddns;
 
-import com.google.api.client.googleapis.util.Utils;
 import com.google.api.services.dns.Dns;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.util.concurrent.RateLimiter;
 import dagger.Binds;
 import dagger.Module;
@@ -28,6 +25,7 @@ import dagger.multibindings.StringKey;
 import google.registry.config.CredentialModule.DefaultCredential;
 import google.registry.config.RegistryConfig.Config;
 import google.registry.dns.writer.DnsWriter;
+import google.registry.util.GoogleCredentialsBundle;
 import java.util.Optional;
 import javax.inject.Named;
 
@@ -37,15 +35,15 @@ public abstract class CloudDnsWriterModule {
 
   @Provides
   static Dns provideDns(
-      @DefaultCredential GoogleCredentials credential,
+      @DefaultCredential GoogleCredentialsBundle credentialsBundle,
       @Config("projectId") String projectId,
       @Config("cloudDnsRootUrl") Optional<String> rootUrl,
       @Config("cloudDnsServicePath") Optional<String> servicePath) {
     Dns.Builder builder =
         new Dns.Builder(
-                Utils.getDefaultTransport(),
-                Utils.getDefaultJsonFactory(),
-                new HttpCredentialsAdapter(credential))
+                credentialsBundle.getHttpTransport(),
+                credentialsBundle.getJsonFactory(),
+                credentialsBundle.getHttpRequestInitializer())
             .setApplicationName(projectId);
 
     rootUrl.ifPresent(builder::setRootUrl);

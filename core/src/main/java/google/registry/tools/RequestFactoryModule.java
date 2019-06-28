@@ -15,15 +15,12 @@
 package google.registry.tools;
 
 import com.google.api.client.http.HttpRequestFactory;
-import com.google.api.client.http.HttpRequestInitializer;
 import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import dagger.Module;
 import dagger.Provides;
 import google.registry.config.CredentialModule.DefaultCredential;
 import google.registry.config.RegistryConfig;
-import javax.inject.Qualifier;
+import google.registry.util.GoogleCredentialsBundle;
 
 /**
  * Module for providing the HttpRequestFactory.
@@ -37,15 +34,8 @@ class RequestFactoryModule {
   static final int REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 
   @Provides
-  @DefaultCredentialInitializer
-  static HttpRequestInitializer provideHttpRequestInitializer(
-      @DefaultCredential GoogleCredentials credential) {
-    return new HttpCredentialsAdapter(credential);
-  }
-
-  @Provides
   static HttpRequestFactory provideHttpRequestFactory(
-      @DefaultCredentialInitializer HttpRequestInitializer httpRequestInitializer) {
+      @DefaultCredential GoogleCredentialsBundle credentialsBundle) {
     if (RegistryConfig.areServersLocal()) {
       return new NetHttpTransport()
           .createRequestFactory(
@@ -57,7 +47,7 @@ class RequestFactoryModule {
       return new NetHttpTransport()
           .createRequestFactory(
               request -> {
-                httpRequestInitializer.initialize(request);
+                credentialsBundle.getHttpRequestInitializer().initialize(request);
                 // GAE request times out after 10 min, so here we set the timeout to 10 min. This is
                 // needed to support some nomulus commands like updating premium lists that take
                 // a lot of time to complete.
@@ -68,11 +58,4 @@ class RequestFactoryModule {
               });
     }
   }
-
-  /**
-   * Dagger qualifier to provide {@link HttpRequestInitializer} binding to {@link
-   * DefaultCredential}.
-   */
-  @Qualifier
-  @interface DefaultCredentialInitializer {}
 }

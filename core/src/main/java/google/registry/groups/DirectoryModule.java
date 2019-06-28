@@ -14,14 +14,12 @@
 
 package google.registry.groups;
 
-import com.google.api.client.googleapis.util.Utils;
 import com.google.api.services.admin.directory.Directory;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import dagger.Module;
 import dagger.Provides;
 import google.registry.config.CredentialModule.DelegatedCredential;
 import google.registry.config.RegistryConfig.Config;
+import google.registry.util.GoogleCredentialsBundle;
 
 /** Dagger module for the Google {@link Directory} service. */
 @Module
@@ -29,11 +27,12 @@ public final class DirectoryModule {
 
   @Provides
   static Directory provideDirectory(
-      @DelegatedCredential GoogleCredentials credential, @Config("projectId") String projectId) {
+      @DelegatedCredential GoogleCredentialsBundle credentialsBundle,
+      @Config("projectId") String projectId) {
     return new Directory.Builder(
-            Utils.getDefaultTransport(),
-            Utils.getDefaultJsonFactory(),
-            new HttpCredentialsAdapter(credential))
+            credentialsBundle.getHttpTransport(),
+            credentialsBundle.getJsonFactory(),
+            credentialsBundle.getHttpRequestInitializer())
         .setApplicationName(projectId)
         .build();
   }

@@ -14,12 +14,9 @@
 
 package google.registry.monitoring.whitebox;
 
-import com.google.api.client.googleapis.util.Utils;
 import com.google.api.services.monitoring.v3.Monitoring;
 import com.google.api.services.monitoring.v3.model.MonitoredResource;
 import com.google.appengine.api.modules.ModulesService;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.monitoring.metrics.MetricReporter;
@@ -29,6 +26,7 @@ import dagger.Module;
 import dagger.Provides;
 import google.registry.config.CredentialModule.JsonCredential;
 import google.registry.config.RegistryConfig.Config;
+import google.registry.util.GoogleCredentialsBundle;
 import org.joda.time.Duration;
 
 /** Dagger module for Google Stackdriver service connection objects. */
@@ -41,11 +39,12 @@ public final class StackdriverModule {
 
   @Provides
   static Monitoring provideMonitoring(
-      @JsonCredential GoogleCredentials credential, @Config("projectId") String projectId) {
+      @JsonCredential GoogleCredentialsBundle credentialsBundle,
+      @Config("projectId") String projectId) {
     return new Monitoring.Builder(
-            Utils.getDefaultTransport(),
-            Utils.getDefaultJsonFactory(),
-            new HttpCredentialsAdapter(credential))
+            credentialsBundle.getHttpTransport(),
+            credentialsBundle.getJsonFactory(),
+            credentialsBundle.getHttpRequestInitializer())
         .setApplicationName(projectId)
         .build();
   }

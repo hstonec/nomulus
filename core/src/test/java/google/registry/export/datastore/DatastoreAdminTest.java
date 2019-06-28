@@ -17,14 +17,13 @@ package google.registry.export.datastore;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth8.assertThat;
 
-import com.google.api.client.googleapis.util.Utils;
 import com.google.api.client.http.GenericUrl;
 import com.google.api.client.http.HttpRequest;
-import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableList;
 import google.registry.testing.TestDataHelper;
+import google.registry.util.GoogleCredentialsBundle;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -49,7 +48,6 @@ public class DatastoreAdminTest {
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private GoogleCredentials googleCredential;
   private DatastoreAdmin datastoreAdmin;
 
   private static HttpRequest simulateSendRequest(HttpRequest httpRequest) {
@@ -80,13 +78,14 @@ public class DatastoreAdminTest {
   @Before
   public void setup() {
     Date oneHourLater = new Date(System.currentTimeMillis() + 3_600_000);
-    googleCredential = GoogleCredentials.create(new AccessToken(ACCESS_TOKEN, oneHourLater));
-
+    GoogleCredentials googleCredentials = GoogleCredentials
+        .create(new AccessToken(ACCESS_TOKEN, oneHourLater));
+    GoogleCredentialsBundle credentialsBundle = GoogleCredentialsBundle.create(googleCredentials);
     datastoreAdmin =
         new DatastoreAdmin.Builder(
-                Utils.getDefaultTransport(),
-                Utils.getDefaultJsonFactory(),
-                new HttpCredentialsAdapter(googleCredential))
+                credentialsBundle.getHttpTransport(),
+                credentialsBundle.getJsonFactory(),
+                credentialsBundle.getHttpRequestInitializer())
             .setApplicationName("MyApplication")
             .setProjectId("MyCloudProject")
             .build();

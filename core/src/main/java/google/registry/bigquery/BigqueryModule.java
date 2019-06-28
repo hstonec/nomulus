@@ -14,17 +14,15 @@
 
 package google.registry.bigquery;
 
-import com.google.api.client.googleapis.util.Utils;
 import com.google.api.services.bigquery.Bigquery;
 import com.google.api.services.bigquery.model.TableFieldSchema;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableList;
 import dagger.Module;
 import dagger.Provides;
 import dagger.multibindings.Multibinds;
 import google.registry.config.CredentialModule.DefaultCredential;
 import google.registry.config.RegistryConfig.Config;
+import google.registry.util.GoogleCredentialsBundle;
 import java.util.Map;
 
 /** Dagger module for Google {@link Bigquery} connection objects. */
@@ -36,11 +34,12 @@ public abstract class BigqueryModule {
 
   @Provides
   static Bigquery provideBigquery(
-      @DefaultCredential GoogleCredentials credential, @Config("projectId") String projectId) {
+      @DefaultCredential GoogleCredentialsBundle credentialsBundle,
+      @Config("projectId") String projectId) {
     return new Bigquery.Builder(
-            Utils.getDefaultTransport(),
-            Utils.getDefaultJsonFactory(),
-            new HttpCredentialsAdapter(credential))
+            credentialsBundle.getHttpTransport(),
+            credentialsBundle.getJsonFactory(),
+            credentialsBundle.getHttpRequestInitializer())
         .setApplicationName(projectId)
         .build();
   }

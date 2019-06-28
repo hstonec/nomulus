@@ -17,16 +17,14 @@ package google.registry.reporting;
 import static google.registry.request.RequestParameters.extractOptionalParameter;
 import static google.registry.request.RequestParameters.extractRequiredParameter;
 
-import com.google.api.client.googleapis.util.Utils;
 import com.google.api.services.dataflow.Dataflow;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import dagger.Module;
 import dagger.Provides;
 import google.registry.config.CredentialModule.DefaultCredential;
 import google.registry.config.RegistryConfig.Config;
 import google.registry.request.HttpException.BadRequestException;
 import google.registry.request.Parameter;
+import google.registry.util.GoogleCredentialsBundle;
 import google.registry.util.Clock;
 import java.util.Optional;
 import javax.servlet.http.HttpServletRequest;
@@ -120,11 +118,12 @@ public class ReportingModule {
   /** Constructs a {@link Dataflow} API client with default settings. */
   @Provides
   static Dataflow provideDataflow(
-      @DefaultCredential GoogleCredentials credential, @Config("projectId") String projectId) {
+      @DefaultCredential GoogleCredentialsBundle credentialsBundle,
+      @Config("projectId") String projectId) {
     return new Dataflow.Builder(
-            Utils.getDefaultTransport(),
-            Utils.getDefaultJsonFactory(),
-            new HttpCredentialsAdapter(credential))
+            credentialsBundle.getHttpTransport(),
+            credentialsBundle.getJsonFactory(),
+            credentialsBundle.getHttpRequestInitializer())
         .setApplicationName(String.format("%s billing", projectId))
         .build();
   }

@@ -14,13 +14,11 @@
 
 package google.registry.export.datastore;
 
-import com.google.api.client.googleapis.util.Utils;
-import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
 import dagger.Module;
 import dagger.Provides;
 import google.registry.config.CredentialModule;
 import google.registry.config.RegistryConfig;
+import google.registry.util.GoogleCredentialsBundle;
 import javax.inject.Singleton;
 
 /** Dagger module that configures provision of {@link DatastoreAdmin}. */
@@ -30,12 +28,12 @@ public abstract class DatastoreAdminModule {
   @Singleton
   @Provides
   static DatastoreAdmin provideDatastoreAdmin(
-      @CredentialModule.DefaultCredential GoogleCredentials credential,
+      @CredentialModule.DefaultCredential GoogleCredentialsBundle credentialsBundle,
       @RegistryConfig.Config("projectId") String projectId) {
     return new DatastoreAdmin.Builder(
-            Utils.getDefaultTransport(),
-            Utils.getDefaultJsonFactory(),
-            new HttpCredentialsAdapter(credential))
+            credentialsBundle.getHttpTransport(),
+            credentialsBundle.getJsonFactory(),
+            credentialsBundle.getHttpRequestInitializer())
         .setApplicationName(projectId)
         .setProjectId(projectId)
         .build();
