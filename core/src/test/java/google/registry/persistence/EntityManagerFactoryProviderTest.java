@@ -16,6 +16,7 @@ package google.registry.persistence;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import org.junit.After;
@@ -37,7 +38,10 @@ public class EntityManagerFactoryProviderTest {
   public void init() {
     emf =
         EntityManagerFactoryProvider.create(
-            database.getJdbcUrl(), database.getUsername(), database.getPassword());
+            database.getJdbcUrl(),
+            database.getUsername(),
+            database.getPassword(),
+            ImmutableMap.of());
   }
 
   @After
