@@ -15,23 +15,35 @@
 package google.registry.model.transaction;
 
 import google.registry.model.ofy.DatastoreTransactionManager;
+import google.registry.persistence.DaggerPersistenceComponent;
+import javax.persistence.EntityManagerFactory;
 
 /** Factory class to create {@link TransactionManager} instance. */
 public class TransactionManagerFactory {
 
-  private static final TransactionManager TM = createTransactionManager();
+  private static final DatastoreTransactionManager DSTM = createDatastoreTransactionManager();
+  private static final DatabaseTransactionManager DBTM = createDatabaseTransactionManager();
 
   private TransactionManagerFactory() {}
 
-  private static TransactionManager createTransactionManager() {
-    // TODO: Conditionally returns the corresponding implementation once we have
-    //  CloudSqlTransactionManager
+  private static DatastoreTransactionManager createDatastoreTransactionManager() {
     return new DatastoreTransactionManager(null);
+  }
+
+  private static DatabaseTransactionManager createDatabaseTransactionManager() {
+    EntityManagerFactory emf = DaggerPersistenceComponent.create().appEngineEntityManagerFactory();
+    Runtime.getRuntime().addShutdownHook(new Thread(emf::close));
+    return new DatabaseTransactionManager(emf);
   }
 
   /** Returns {@link TransactionManager} instance. */
   public static TransactionManager tm() {
+    // TODO: Returns DatabaseTransactionManager when we want to migrate all traffic
+    //  to Cloud Sql.
+    return DSTM;
+  }
 
-    return TM;
+  public static DatabaseTransactionManager dbtm() {
+    return DBTM;
   }
 }

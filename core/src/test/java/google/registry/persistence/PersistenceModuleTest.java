@@ -27,9 +27,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-/** Unit tests for {@link EntityManagerFactoryProvider}. */
+/** Unit tests for {@link PersistenceModule}. */
 @RunWith(JUnit4.class)
-public class EntityManagerFactoryProviderTest {
+public class PersistenceModuleTest {
   @Rule public PostgreSQLContainer database = new PostgreSQLContainer();
 
   private EntityManagerFactory emf;
@@ -37,7 +37,7 @@ public class EntityManagerFactoryProviderTest {
   @Before
   public void init() {
     emf =
-        EntityManagerFactoryProvider.create(
+        PersistenceModule.create(
             database.getJdbcUrl(),
             database.getUsername(),
             database.getPassword(),

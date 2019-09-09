@@ -23,22 +23,26 @@ import static google.registry.config.RegistryConfig.getHibernateHikariMinimumIdl
 import static google.registry.config.RegistryConfig.getHibernateLogSqlQueries;
 
 import com.google.appengine.tools.cloudstorage.GcsFilename;
-import com.google.appengine.tools.cloudstorage.GcsServiceFactory;
-import com.google.appengine.tools.cloudstorage.RetryParams;
-import com.google.cloud.kms.v1.CryptoKeyName;
-import com.google.cloud.kms.v1.KeyManagementServiceClient;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.ByteString;
+import dagger.Module;
+import dagger.Provides;
 import google.registry.config.RegistryConfig;
 import google.registry.gcs.GcsUtils;
+import google.registry.keyring.kms.KmsConnection;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.annotation.Documented;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import javax.inject.Qualifier;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 import org.hibernate.cfg.Environment;
 
-/** Factory class to provide {@link EntityManagerFactory} instance. */
-public class EntityManagerFactoryProvider {
+/** Dagger module class for the persistence layer. */
+@Module
+public class PersistenceModule {
   // This name must be the same as the one defined in persistence.xml.
   public static final String PERSISTENCE_UNIT_NAME = "nomulus";
   public static final String HIKARI_CONNECTION_TIMEOUT = "hibernate.hikari.connectionTimeout";
@@ -46,10 +50,9 @@ public class EntityManagerFactoryProvider {
   public static final String HIKARI_MAXIMUM_POOL_SIZE = "hibernate.hikari.maximumPoolSize";
   public static final String HIKARI_IDLE_TIMEOUT = "hibernate.hikari.idleTimeout";
 
-  // Size of Google Cloud Storage client connection buffer in bytes.
-  private static final int GCS_BUFFER_SIZE = 1024 * 1024;
-
-  private static ImmutableMap<String, String> getDefaultProperties() {
+  @Provides
+  @DefaultDatabaseConfigs
+  public static ImmutableMap<String, String> providesDefaultDatabaseConfigs() {
     ImmutableMap.Builder<String, String> properties = ImmutableMap.builder();
 
     properties.put(Environment.DRIVER, "org.postgresql.Driver");
@@ -69,30 +72,12 @@ public class EntityManagerFactoryProvider {
     return properties.build();
   }
 
-  /** Constructs the {@link EntityManagerFactory} instance. */
-  public static EntityManagerFactory create(
-      String jdbcUrl, String username, String password, ImmutableMap<String, String> overrides) {
-    ImmutableMap.Builder<String, String> properties = ImmutableMap.builder();
-    properties.putAll(getDefaultProperties());
-    properties.putAll(overrides);
-    properties.put(Environment.URL, jdbcUrl);
-    properties.put(Environment.USER, username);
-    properties.put(Environment.PASS, password);
-    EntityManagerFactory emf =
-        Persistence.createEntityManagerFactory(PERSISTENCE_UNIT_NAME, properties.build());
-    checkState(
-        emf != null,
-        "Persistence.createEntityManagerFactory() returns a null EntityManagerFactory");
-    return emf;
-  }
-
-  /** Constructs the {@link EntityManagerFactory} instance for the App Engine application. */
-  public static EntityManagerFactory createForAppEngine() {
-
-    GcsUtils gcsUtils =
-        new GcsUtils(
-            GcsServiceFactory.createGcsService(RetryParams.getDefaultInstance()), GCS_BUFFER_SIZE);
-
+  @Provides
+  @AppEnginEMF
+  public static EntityManagerFactory providesEntityManagerFactory(
+      GcsUtils gcsUtils,
+      KmsConnection kmsConnection,
+      @DefaultDatabaseConfigs ImmutableMap<String, String> defaultConfigs) {
     ByteString cipherText;
     try {
       cipherText =
@@ -104,26 +89,15 @@ public class EntityManagerFactoryProvider {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
-
-    String[] credentialFields;
-    try (KeyManagementServiceClient client = KeyManagementServiceClient.create()) {
-      CryptoKeyName name =
-          CryptoKeyName.of(
-              RegistryConfig.getKmsKeyRingProjectId(),
-              RegistryConfig.getKmsKeyRingLocation(),
-              RegistryConfig.getKmsKeyRingName(),
-              RegistryConfig.getKeyNameForCloudSql());
-
-      // The credential uses the below format, the delimiter is a single space:
-      // [instanceConnectionName] [username] [password]
-      credentialFields =
-          client.decrypt(name.toString(), cipherText).getPlaintext().toStringUtf8().split(" ");
-      if (credentialFields.length != 3) {
-        throw new IllegalArgumentException(
-            "Number of fields in the credential file is not correct");
-      }
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
+    // The credential uses the below format, the delimiter is a single space:
+    // [instanceConnectionName] [username] [password]
+    String[] credentialFields =
+        new String(
+                kmsConnection.decrypt(
+                    RegistryConfig.getKeyNameForCloudSql(), cipherText.toStringUtf8()))
+            .split(" ");
+    if (credentialFields.length != 3) {
+      throw new IllegalArgumentException("Number of fields in the credential file is not correct");
     }
 
     String instanceConnectionName = credentialFields[0];
@@ -133,9 +107,38 @@ public class EntityManagerFactoryProvider {
     ImmutableMap.Builder<String, String> overrides = ImmutableMap.builder();
     // For Java users, the Cloud SQL JDBC Socket Factory can provide authenticated connections.
     // See https://github.com/GoogleCloudPlatform/cloud-sql-jdbc-socket-factory for details.
+    overrides.putAll(defaultConfigs);
     overrides.put("socketFactory", "com.google.cloud.sql.postgres.SocketFactory");
     overrides.put("cloudSqlInstance", instanceConnectionName);
 
     return create(RegistryConfig.getCloudSqlJdbcUrl(), username, password, overrides.build());
   }
+
+  /** Constructs the {@link EntityManagerFactory} instance. */
+  public static EntityManagerFactory create(
+      String jdbcUrl, String username, String password, ImmutableMap<String, String> configs) {
+    ImmutableMap.Builder<String, String> properties = ImmutableMap.builder();
+    properties.putAll(configs);
+    properties.put(Environment.URL, jdbcUrl);
+    properties.put(Environment.USER, username);
+    properties.put(Environment.PASS, password);
+    EntityManagerFactory emf =
+        Persistence.createEntityManagerFactory(PERSISTENCE_UNIT_NAME, properties.build());
+    checkState(
+        emf != null,
+        "Persistence.createEntityManagerFactory() returns a null EntityManagerFactory");
+    return emf;
+  }
+
+  /** Dagger qualifier for the {@link EntityManagerFactory} used for App Engine application. */
+  @Qualifier
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  public @interface AppEnginEMF {}
+
+  /** Dagger qualifier for the default database configurations. */
+  @Qualifier
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  public @interface DefaultDatabaseConfigs {}
 }
