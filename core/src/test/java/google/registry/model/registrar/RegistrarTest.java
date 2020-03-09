@@ -456,14 +456,12 @@ public class RegistrarTest extends EntityTestCase {
 
   @Test
   public void testFailure_driveFolderId_asFullUrl() {
+    String driveFolderId =
+        "https://drive.google.com/drive/folders/1j3v7RZkU25DjbTx2-Q93H04zKOBau89M";
     IllegalArgumentException thrown =
         assertThrows(
             IllegalArgumentException.class,
-            () ->
-                registrar
-                    .asBuilder()
-                    .setDriveFolderId(
-                        "https://drive.google.com/drive/folders/1j3v7RZkU25DjbTx2-Q93H04zKOBau89M"));
+            () -> registrar.asBuilder().setDriveFolderId(driveFolderId));
     assertThat(thrown).hasMessageThat().isEqualTo("Drive folder ID must not be a full URL");
   }
 
